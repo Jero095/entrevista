@@ -1,0 +1,16 @@
+tag,descripcion,area,unidad,tipo_alarma,limite,criticidad,vigente_desde
+PT-101,Presión descarga bomba P-101,Bombeo,bar,HI,8.50,HIGH,2026-01-01
+PT-102,Presión succión bomba P-102,Bombeo,bar,LO,0.50,MEDIUM,2026-01-01
+FT-201,Flujo entrada tanque TK-200,Tanques,m3/h,LO,80.00,MEDIUM,2026-01-01
+LT-202,Nivel tanque TK-200,Tanques,%,HIHI,95.00,CRITICAL,2026-01-01
+LT-203,Nivel tanque TK-201,Tanques,%,LOLO,5.00,CRITICAL,2026-01-01
+TT-301,Temperatura reactor R-300,Reactor,°C,HI,210.00,HIGH,2026-01-01
+TT-302,Temperatura chaqueta R-300,Reactor,°C,HIHI,130.00,CRITICAL,2026-01-01
+PT-303,Presión reactor R-300,Reactor,bar,HIHI,18.00,CRITICAL,2026-01-01
+AT-304,pH salida reactor,Reactor,pH,DEV,1.00,MEDIUM,2026-01-01
+VT-401,Vibración compresor C-400,Compresión,mm/s,HI,7.10,HIGH,2026-01-01
+TT-402,Temperatura aceite C-400,Compresión,°C,HI,85.00,MEDIUM,2026-01-01
+ZS-403,Estado válvula XV-403,Compresión,,DISC,0.00,LOW,2026-01-01
+FT-501,Flujo vapor caldera B-500,Servicios,t/h,ROC,5.00,LOW,2026-01-01
+PT-502,Presión aire instrumentos,Servicios,bar,LO,5.50,HIGH,2026-01-01
+ET-503,Corriente motor M-503,Servicios,A,HI,60.00,LOW,2026-01-01

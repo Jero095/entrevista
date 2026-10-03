@@ -1,0 +1,343 @@
+{
+  "info": {
+    "name": "API de alarmas SCADA",
+    "description": "Colección para probar la API. Importar en Postman y ejecutar con Collection Runner.\n\nVariables: `baseUrl` (por defecto http://localhost:8000) y `apiKey` (valor de API_KEY en .env).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "apiKey", "value": "dev-api-key-cambiar" }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{apiKey}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Toda respuesta de error debe tener el formato uniforme {error: {codigo, mensaje, detalle}}",
+          "if (pm.response.code >= 400) {",
+          "    pm.test('Formato de error uniforme', () => {",
+          "        const body = pm.response.json();",
+          "        pm.expect(body).to.have.property('error');",
+          "        pm.expect(body.error).to.have.all.keys('codigo', 'mensaje', 'detalle');",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Salud",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('BD disponible', () => pm.expect(pm.response.json().base_de_datos).to.eql('ok'));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Alarmas",
+      "item": [
+        {
+          "name": "Listar alarmas (sin filtros, paginado)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?page=1&size=20", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "size", "value": "20" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const body = pm.response.json();",
+            "pm.test('Respeta el tamaño de página', () => pm.expect(body.items.length).to.be.at.most(20));",
+            "pm.test('Incluye metadatos de paginación', () => pm.expect(body).to.include.all.keys('total', 'page', 'size', 'pages'));",
+            "pm.test('Ordenado del más reciente al más antiguo', () => {",
+            "    const ts = body.items.map(i => i.timestamp_utc);",
+            "    pm.expect(ts).to.eql([...ts].sort().reverse());",
+            "});",
+            "if (body.items.length) { pm.collectionVariables.set('idEvento', body.items[0].id); }"
+          ] } }]
+        },
+        {
+          "name": "Filtrar por rango de tiempo",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?desde=2026-07-01T00:00:00Z&hasta=2026-07-02T00:00:00Z", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "desde", "value": "2026-07-01T00:00:00Z" }, { "key": "hasta", "value": "2026-07-02T00:00:00Z" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Todos los eventos están dentro del rango', () => {",
+            "    pm.response.json().items.forEach(i => {",
+            "        pm.expect(i.timestamp_utc >= '2026-07-01T00:00:00').to.be.true;",
+            "        pm.expect(i.timestamp_utc < '2026-07-02T00:00:00').to.be.true;",
+            "    });",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Filtrar por criticidad (HIGH o superior)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?criticidad_min=HIGH", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "criticidad_min", "value": "HIGH" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Solo HIGH o CRITICAL', () => pm.response.json().items.forEach(i => pm.expect(['HIGH', 'CRITICAL']).to.include(i.criticidad)));"
+          ] } }]
+        },
+        {
+          "name": "Filtrar por varias criticidades exactas",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?criticidad=LOW&criticidad=CRITICAL", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "criticidad", "value": "LOW" }, { "key": "criticidad", "value": "CRITICAL" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Solo LOW o CRITICAL', () => pm.response.json().items.forEach(i => pm.expect(['LOW', 'CRITICAL']).to.include(i.criticidad)));"
+          ] } }]
+        },
+        {
+          "name": "Filtrar por tag (acepta variantes como pt_101)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?tag=pt_101", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "tag", "value": "pt_101" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Tag normalizado a PT-101', () => pm.response.json().items.forEach(i => pm.expect(i.tag).to.eql('PT-101')));",
+            "pm.test('Incluye unidad y límite del catálogo', () => {",
+            "    const i = pm.response.json().items[0];",
+            "    pm.expect(i.unidad).to.eql('bar');",
+            "    pm.expect(i.limite).to.eql(8.5);",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Combinar filtros (tiempo + criticidad + tag + estado)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?desde=2026-07-01&hasta=2026-08-01&criticidad_min=HIGH&tag=PT-101&estado=ACTIVE", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "desde", "value": "2026-07-01" }, { "key": "hasta", "value": "2026-08-01" }, { "key": "criticidad_min", "value": "HIGH" }, { "key": "tag", "value": "PT-101" }, { "key": "estado", "value": "ACTIVE" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Cumple todos los filtros', () => pm.response.json().items.forEach(i => {",
+            "    pm.expect(i.tag).to.eql('PT-101');",
+            "    pm.expect(i.estado).to.eql('ACTIVE');",
+            "    pm.expect(['HIGH', 'CRITICAL']).to.include(i.criticidad);",
+            "}));"
+          ] } }]
+        },
+        {
+          "name": "Obtener evento por id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas/{{idEvento}}", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas", "{{idEvento}}"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Es el evento pedido', () => pm.expect(String(pm.response.json().id)).to.eql(pm.collectionVariables.get('idEvento')));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Métricas",
+      "item": [
+        {
+          "name": "Top tags por alarmas",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/metricas/top-tags?limit=5", "host": ["{{baseUrl}}"], "path": ["api", "v1", "metricas", "top-tags"],
+              "query": [{ "key": "limit", "value": "5" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "const items = pm.response.json().items;",
+            "pm.test('Devuelve como máximo 5 tags', () => pm.expect(items.length).to.be.at.most(5));",
+            "pm.test('Ordenado de mayor a menor', () => {",
+            "    const totales = items.map(i => i.total);",
+            "    pm.expect(totales).to.eql([...totales].sort((a, b) => b - a));",
+            "});"
+          ] } }]
+        },
+        {
+          "name": "Top tags por eventos, CRITICAL, en un rango",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/metricas/top-tags?contar=eventos&criticidad_min=CRITICAL&desde=2026-08-01&hasta=2026-09-01", "host": ["{{baseUrl}}"], "path": ["api", "v1", "metricas", "top-tags"],
+              "query": [{ "key": "contar", "value": "eventos" }, { "key": "criticidad_min", "value": "CRITICAL" }, { "key": "desde", "value": "2026-08-01" }, { "key": "hasta", "value": "2026-09-01" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Cuenta eventos', () => pm.expect(pm.response.json().contar).to.eql('eventos'));"
+          ] } }]
+        },
+        {
+          "name": "Alarmas por criticidad",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/metricas/por-criticidad", "host": ["{{baseUrl}}"], "path": ["api", "v1", "metricas", "por-criticidad"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Incluye las 4 criticidades', () => pm.expect(pm.response.json().items).to.have.lengthOf(4));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Catálogo",
+      "item": [
+        {
+          "name": "Listar tags",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/tags", "host": ["{{baseUrl}}"], "path": ["api", "v1", "tags"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('200 OK', () => pm.response.to.have.status(200));",
+            "pm.test('Cada tag tiene sus alarmas configuradas', () => pm.response.json().forEach(t => pm.expect(t.alarmas.length).to.be.above(0)));"
+          ] } }]
+        }
+      ]
+    },
+    {
+      "name": "Errores y validaciones",
+      "item": [
+        {
+          "name": "422 - rango de fechas invertido",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?desde=2026-07-08&hasta=2026-07-01", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "desde", "value": "2026-07-08" }, { "key": "hasta", "value": "2026-07-01" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('Código VALIDACION', () => pm.expect(pm.response.json().error.codigo).to.eql('VALIDACION'));"
+          ] } }]
+        },
+        {
+          "name": "422 - fecha con formato inválido",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?desde=ayer", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "desde", "value": "ayer" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));",
+            "pm.test('Señala el campo desde', () => pm.expect(pm.response.json().error.detalle[0].campo).to.eql('desde'));"
+          ] } }]
+        },
+        {
+          "name": "422 - criticidad inexistente",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?criticidad=SUPER", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "criticidad", "value": "SUPER" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));"
+          ] } }]
+        },
+        {
+          "name": "422 - tamaño de página excesivo",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?size=10000", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "size", "value": "10000" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));"
+          ] } }]
+        },
+        {
+          "name": "422 - parámetro desconocido (typo)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?criticiad=HIGH", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "criticiad", "value": "HIGH" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422: no se ignora en silencio', () => pm.response.to.have.status(422));"
+          ] } }]
+        },
+        {
+          "name": "422 - SQL injection en tag se rechaza por formato",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?tag=PT-101' OR '1'='1", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "tag", "value": "PT-101' OR '1'='1" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('422', () => pm.response.to.have.status(422));"
+          ] } }]
+        },
+        {
+          "name": "404 - tag inexistente",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas?tag=XX-999", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"],
+              "query": [{ "key": "tag", "value": "XX-999" }] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));",
+            "pm.test('Código NO_ENCONTRADO', () => pm.expect(pm.response.json().error.codigo).to.eql('NO_ENCONTRADO'));"
+          ] } }]
+        },
+        {
+          "name": "404 - evento inexistente",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas/999999999", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas", "999999999"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('404', () => pm.response.to.have.status(404));"
+          ] } }]
+        },
+        {
+          "name": "401 - sin API key",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('401', () => pm.response.to.have.status(401));",
+            "pm.test('Código NO_AUTORIZADO', () => pm.expect(pm.response.json().error.codigo).to.eql('NO_AUTORIZADO'));"
+          ] } }]
+        },
+        {
+          "name": "405 - método no permitido",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/api/v1/alarmas", "host": ["{{baseUrl}}"], "path": ["api", "v1", "alarmas"] }
+          },
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('405: la API es de solo lectura', () => pm.response.to.have.status(405));"
+          ] } }]
+        }
+      ]
+    }
+  ]
+}
