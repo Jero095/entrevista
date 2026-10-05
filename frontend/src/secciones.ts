@@ -1,7 +1,8 @@
-export type Seccion = 'resumen' | 'alarmas' | 'detalle' | 'top' | 'criticidad' | 'catalogo' | 'calidad' | 'errores'
+export type Seccion = 'resumen' | 'graficas' | 'alarmas' | 'detalle' | 'top' | 'criticidad' | 'catalogo' | 'calidad' | 'errores'
 
 export const SECCIONES: { id: Seccion; titulo: string; endpoint: string }[] = [
   { id: 'resumen', titulo: 'Resumen', endpoint: 'Vista general' },
+  { id: 'graficas', titulo: 'Gráficas', endpoint: 'Valor vs. tiempo y umbral' },
   { id: 'alarmas', titulo: 'Alarmas', endpoint: 'GET /alarmas' },
   { id: 'detalle', titulo: 'Detalle de evento', endpoint: 'GET /alarmas/{id}' },
   { id: 'top', titulo: 'Top tags', endpoint: 'GET /metricas/top-tags' },

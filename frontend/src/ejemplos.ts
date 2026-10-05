@@ -61,3 +61,13 @@ export interface FiltrosRango {
 export const RANGO_VACIO: FiltrosRango = { desde: '', hasta: '' }
 export const POR_CRITICIDAD_EJEMPLO: FiltrosRango = { desde: '2026-07-01T00:00', hasta: '2026-08-01T00:00' }
 export const POR_CRITICIDAD_EJEMPLO_TEXTO = 'alarmas por criticidad durante julio de 2026.'
+
+export interface FiltrosGraficas {
+  desde: string
+  hasta: string
+  tag: string
+}
+
+export const GRAFICAS_EJEMPLO: FiltrosGraficas = { desde: '2026-07-01T00:00', hasta: '2026-07-08T00:00', tag: '' }
+export const GRAFICAS_EJEMPLO_TEXTO =
+  'todos los instrumentos durante la primera semana de julio de 2026 (unos 1 400 eventos).'

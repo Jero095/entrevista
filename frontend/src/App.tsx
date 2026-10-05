@@ -11,6 +11,7 @@ import { CalidadDatos } from './sections/CalidadDatos'
 import { Catalogo } from './sections/Catalogo'
 import { Detalle } from './sections/Detalle'
 import { Errores } from './sections/Errores'
+import { Graficas } from './sections/Graficas'
 import { PorCriticidad } from './sections/PorCriticidad'
 import { Resumen } from './sections/Resumen'
 import { TopTags } from './sections/TopTags'
@@ -58,6 +59,7 @@ function Layout() {
 
         <main className="min-w-0 flex-1">
           {seccion === 'resumen' && <Resumen irA={setSeccion} />}
+          {seccion === 'graficas' && <Graficas />}
           {seccion === 'alarmas' && <Alarmas onVerDetalle={verDetalle} />}
           {seccion === 'detalle' && <Detalle key={detalleId ?? 'nuevo'} idInicial={detalleId} />}
           {seccion === 'top' && <TopTags />}

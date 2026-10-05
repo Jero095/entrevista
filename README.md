@@ -511,6 +511,7 @@ terminal. Se levanta con el resto del sistema (`docker compose up -d --build`) e
 | Sección | Endpoint | Qué muestra |
 |---|---|---|
 | Resumen | varios | Eventos, alarmas, instrumentos y filas rechazadas; alarmas por criticidad y top 5 tags |
+| Gráficas | `GET /alarmas` (todas las páginas del rango) | Valor de cada evento en el tiempo frente a su umbral, una gráfica por instrumento |
 | Alarmas | `GET /alarmas` | Formulario con todos los filtros, tabla paginada y acceso al detalle de cada evento |
 | Detalle de evento | `GET /alarmas/{id}` | Todos los campos de un evento, con unidad y límite vigente |
 | Top tags | `GET /metricas/top-tags` | Ranking de *bad actors* en barras |
@@ -518,6 +519,17 @@ terminal. Se levanta con el resto del sistema (`docker compose up -d --build`) e
 | Catálogo | `GET /tags` | Configuración de la planta |
 | Calidad de datos | `GET /etl/lotes`, `GET /etl/rechazados` | Resultado de cada carga y filas rechazadas tal como venían en el CSV, con su motivo |
 | Pruebas de errores | varios | 11 casos fijos (422, 404, 401) con el código esperado y el obtenido |
+
+**Gráficas por instrumento.** Eje Y: valor registrado en el evento; eje X: fecha (UTC). El
+umbral se dibuja con el límite **vigente en cada evento**, así que si un límite se versionó
+aparece como un escalón. Cada tipo de alarma usa la gráfica que lo representa:
+
+| Alarma | Gráfica | Por qué |
+|---|---|---|
+| HI, HIHI, LO, LOLO | Dispersión con línea de umbral y zona de alarma | Cada evento es un instante, no una medición continua: no se unen los puntos |
+| DEV | Dispersión con banda de tolerancia (referencia ± límite) | El límite no es un nivel sino una desviación. La referencia se estima como la mediana de los RTN, porque el catálogo no guarda el setpoint |
+| ROC | Barras verticales de la tasa de cambio | El límite es una tasa. Los RTN registran el caudal absoluto (otra magnitud) y no se mezclan en el mismo eje |
+| DISC | Escalones | Una señal 0/1 mantiene su estado hasta el siguiente cambio |
 
 En cada pantalla:
 
