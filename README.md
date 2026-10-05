@@ -13,7 +13,7 @@ flowchart LR
     D -->|carga masiva| E[("SQL Server<br/>modelo normalizado")]
     D -->|filas sin arreglo| F[("evento_rechazado")]
     E -->|vistas, solo lectura| G["API FastAPI<br/>api/"]
-    G --> H["Swagger · Postman · otros sistemas"]
+    G --> H["Frontend · Swagger · Postman · otros sistemas"]
 ```
 
 ## Contenido
@@ -26,6 +26,7 @@ flowchart LR
    - [Ingesta, limpieza y normalización](#2-ingesta-limpieza-y-normalización)
    - [Modelo de datos](#3-modelo-de-datos)
    - [API](#4-api)
+   - [Frontend](#5-frontend)
 5. [Justificación de decisiones técnicas](#justificación-de-decisiones-técnicas)
 6. [Escalabilidad](#escalabilidad)
 7. [Pruebas](#pruebas)
@@ -42,7 +43,8 @@ flowchart LR
 | Modelo relacional (SQL Server) | [`sql/01_schema.sql`](sql/01_schema.sql) |
 | API en Python (FastAPI) | [`api/`](api/) |
 | Colección de Postman | [`postman/alarmas.postman_collection.json`](postman/alarmas.postman_collection.json) |
-| Pruebas (150 unitarias + 31 de integración contra SQL Server) | [`tests/`](tests/) |
+| Frontend de demostración (opcional) | [`frontend/`](frontend/) |
+| Pruebas (156 unitarias + 35 de integración contra SQL Server) | [`tests/`](tests/) |
 | Entorno reproducible | [`docker-compose.yml`](docker-compose.yml), [`Dockerfile`](Dockerfile) |
 
 ```
@@ -53,6 +55,7 @@ flowchart LR
 ├── sql/               creación de la base de datos y del esquema
 ├── api/               API REST (routers → schemas → repository)
 ├── tests/             pruebas del ETL y de la API
+├── frontend/          interfaz web (React + Vite + Tailwind) que consume la API
 ├── postman/           colección de Postman
 └── docs/              diccionario de datos del dataset
 ```
@@ -88,13 +91,14 @@ ni SQL Server: todo corre dentro de los contenedores, y el dataset ya viene incl
    docker compose up -d --build
    ```
 
-   Esto levanta tres servicios en orden:
+   Esto levanta cuatro servicios en orden:
 
    | Servicio | Qué hace |
    |---|---|
    | `db` | SQL Server 2022 (edición Developer) |
    | `etl` | Crea la base, el esquema y el usuario de solo lectura; limpia y carga el CSV; termina |
    | `api` | Arranca cuando el ETL terminó bien, en http://localhost:8000 |
+   | `frontend` | Interfaz web en **http://localhost:3000** (nginx sirve la app y reenvía `/api` a la API) |
 
    La primera vez descarga la imagen de SQL Server (~1,5 GB) y tarda unos minutos.
 
@@ -152,13 +156,18 @@ uvicorn api.main:app --reload     # API en http://localhost:8000
 | Síntoma | Causa y solución |
 |---|---|
 | `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop no está abierto. Abrirlo y esperar a que indique *Engine running* |
-| `Bind for 0.0.0.0:1433 failed` o `...:8000 failed: port is already allocated` | Otro programa usa ese puerto (por ejemplo otro SQL Server u otra API). Cerrarlo o cambiar el puerto publicado en `docker-compose.yml` (`"8001:8000"`) |
+| `Bind for 0.0.0.0:1433 failed` o `...:8000` / `...:3000 failed: port is already allocated` | Otro programa usa ese puerto (por ejemplo otro SQL Server u otra API). Cerrarlo o cambiar el puerto publicado en `docker-compose.yml` (`"8001:8000"`) |
 | La API responde algo inesperado en `localhost:8000` (por ejemplo `"Not signed in"`) | Otro programa local escucha en `127.0.0.1:8000`. Comprobar con `curl http://localhost:8000/health`: esta API responde `{"estado": "ok", ...}` |
 | `etl` termina con `exited (1)` | Ver el motivo con `docker compose logs etl`. Si la contraseña de `.env` no cumple la política de SQL Server, la base no arranca |
 
 ---
 
 ## Probar la API
+
+La forma más rápida es el **frontend en http://localhost:3000**: cada endpoint tiene su
+pantalla con un botón **Datos de ejemplo** que llena una consulta fija y la ejecuta, un
+ícono **ⓘ** con la explicación de cada campo, y la petición HTTP real (URL, código,
+tiempo y JSON de respuesta). Ver [Frontend](#5-frontend).
 
 Todos los endpoints de `/api/v1` requieren el header `X-API-Key` (valor de `API_KEY`
 en `.env`; por defecto `dev-api-key-cambiar`).
@@ -405,8 +414,9 @@ ocurrió. El ETL se niega a cargar un catálogo que modifica una versión existe
 en `alarma_config`, para que el filtro más común (criticidad + tiempo) use un índice sin JOINs.
 
 **Vistas de consulta:** `v_evento_alarma` reconstruye la vista plana (tag, unidad, límite,
-`desviacion_limite`) con JOINs, y `v_catalogo` expone la configuración vigente. La API solo
-lee de estas vistas.
+`desviacion_limite`) con JOINs, y `v_catalogo` expone la configuración vigente.
+`v_lote_carga` y `v_evento_rechazado` exponen la trazabilidad del ETL. La API solo lee de
+estas vistas.
 
 ### 4. API
 
@@ -430,6 +440,8 @@ api/
 | GET | `/api/v1/metricas/top-tags` | Ranking de tags por número de alarmas o de eventos |
 | GET | `/api/v1/metricas/por-criticidad` | Alarmas por criticidad |
 | GET | `/api/v1/tags` | Catálogo de instrumentos con su configuración vigente |
+| GET | `/api/v1/etl/lotes` | Resultado de cada ejecución del ETL (leídas, duplicadas, cargadas, rechazadas) |
+| GET | `/api/v1/etl/rechazados` | Motivos de rechazo agrupados y una muestra de las filas originales del CSV |
 
 **Filtros de `/api/v1/alarmas`:**
 
@@ -490,6 +502,50 @@ válido, la API responde antes de tocar la base de datos. Todos los errores tien
 - Solo métodos GET; CORS restringido a orígenes configurados; tamaño de página acotado.
 - La imagen de Docker corre con un usuario sin privilegios; los secretos van en `.env`, que no se versiona.
 
+### 5. Frontend
+
+Interfaz web en [`frontend/`](frontend/) para recorrer todas las funcionalidades sin usar la
+terminal. Se levanta con el resto del sistema (`docker compose up -d --build`) en
+**http://localhost:3000**.
+
+| Sección | Endpoint | Qué muestra |
+|---|---|---|
+| Resumen | varios | Eventos, alarmas, instrumentos y filas rechazadas; alarmas por criticidad y top 5 tags |
+| Alarmas | `GET /alarmas` | Formulario con todos los filtros, tabla paginada y acceso al detalle de cada evento |
+| Detalle de evento | `GET /alarmas/{id}` | Todos los campos de un evento, con unidad y límite vigente |
+| Top tags | `GET /metricas/top-tags` | Ranking de *bad actors* en barras |
+| Por criticidad | `GET /metricas/por-criticidad` | Distribución de alarmas por nivel |
+| Catálogo | `GET /tags` | Configuración de la planta |
+| Calidad de datos | `GET /etl/lotes`, `GET /etl/rechazados` | Resultado de cada carga y filas rechazadas tal como venían en el CSV, con su motivo |
+| Pruebas de errores | varios | 11 casos fijos (422, 404, 401) con el código esperado y el obtenido |
+
+En cada pantalla:
+
+- **Datos de ejemplo** llena una consulta fija y la ejecuta (por ejemplo, `pt_101` con
+  criticidad HIGH o superior en la primera semana de julio: 324 eventos).
+- Cada campo tiene un ícono **ⓘ** con su explicación.
+- Se muestra la petición HTTP real: URL, código, tiempo y la respuesta JSON completa.
+- La API key se puede cambiar o borrar en la cabecera para ver el error 401.
+
+**Decisiones:**
+
+| Decisión | Por qué |
+|---|---|
+| React + Vite + Tailwind, con TypeScript estricto | Los tipos de las respuestas reflejan los modelos de la API; un error de tipos detiene la compilación |
+| Sin librerías de gráficos ni de componentes | Las barras son CSS; menos dependencias, menos puntos de falla |
+| nginx sirve la app y reenvía `/api` a la API | El navegador habla con un solo origen: no hace falta CORS ni conocer la dirección de la API |
+| Imagen en dos etapas (Node compila, nginx sirve) | La imagen final no incluye Node ni `node_modules` |
+
+Para desarrollar el frontend fuera de Docker (con la API levantada en el puerto 8000):
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, recarga al guardar
+npm run build      # verificación de tipos + compilación
+npm run lint
+```
+
 ---
 
 ## Justificación de decisiones técnicas
@@ -547,9 +603,9 @@ Siguientes pasos para volúmenes de planta (millones de eventos por año):
 python -m pytest
 ```
 
-**181 pruebas** en dos niveles.
+**191 pruebas** en dos niveles.
 
-**Unitarias (150)**, no necesitan base de datos:
+**Unitarias (156)**, no necesitan base de datos:
 
 | Archivo | Qué prueba |
 |---|---|
@@ -557,9 +613,9 @@ python -m pytest
 | [`test_pipeline.py`](tests/test_pipeline.py) | Deduplicación, filas recuperables vs. rechazadas, acumulación de motivos, criticidad inferida del catálogo, tag fuera del catálogo, eventos anteriores a la configuración, incoherencias CSV/catálogo |
 | [`test_catalog.py`](tests/test_catalog.py) | Versión vigente según la fecha, catálogo inválido, y que el catálogo coincida con el generador |
 | [`test_loader.py`](tests/test_loader.py) | Conversión de nulos de pandas y fechas para el driver |
-| [`tests/api/`](tests/api/test_api.py) | API con repositorio falso: cada regla de validación (422), 404, 401, 405, 503 con la BD caída, 500 sin filtrar detalles internos, normalización de filtros y formato de respuesta |
+| [`tests/api/`](tests/api/test_api.py) | API con repositorio falso: cada regla de validación (422), 404, 401, 405, 503 con la BD caída, 500 sin filtrar detalles internos, normalización de filtros, formato de respuesta y endpoints de calidad de datos |
 
-**De integración (31)**, en [`tests/integration/`](tests/integration/test_api_sqlserver.py):
+**De integración (35)**, en [`tests/integration/`](tests/integration/test_api_sqlserver.py):
 llaman a la API real levantada con Docker y comparan cada resultado con una consulta directa
 a SQL Server, verificando toda la cadena CSV → ETL → base de datos → API.
 
@@ -569,6 +625,7 @@ a SQL Server, verificando toda la cadena CSV → ETL → base de datos → API.
 | Paginación sin repetidos, orden descendente y fechas en UTC |
 | Rankings de top tags (por alarmas, por eventos, CRITICAL en un rango) y conteo por criticidad idénticos a SQL |
 | El catálogo de la API coincide con la base |
+| Lotes del ETL y filas rechazadas coinciden con la base |
 | Errores 422, 404 y 401 en la API real |
 | El usuario `api_lectura` **no** puede leer tablas ni borrar datos (SQL Server lo deniega) |
 
@@ -588,8 +645,10 @@ probables, sintaxis moderna y orden de imports).
 
 ## Limitaciones y trabajo futuro
 
-- **Frontend**: no incluido. La API ya expone lo necesario para un dashboard (listado
-  filtrable, `/metricas/top-tags`, `/metricas/por-criticidad`, `/tags`) y tiene CORS configurado.
+- **Frontend**: es una herramienta de demostración. La API key va incluida en el código
+  del navegador, algo aceptable para una demo local pero no en producción, donde los
+  usuarios se autenticarían con el proveedor de identidad de la planta (OAuth2/OIDC) y la
+  clave quedaría solo del lado del servidor.
 - **Métricas ISA-18.2 adicionales**: tiempo medio de reconocimiento, alarmas por operador por
   hora, alarmas *chattering* y alarmas permanentes (sin RTN). Los datos ya lo permiten porque
   se conserva el ciclo de vida completo.

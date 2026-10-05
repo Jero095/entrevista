@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.config import get_api_settings
 from api.db import Repo
 from api.errors import registrar_manejadores
-from api.routers import alarmas, metricas, tags
+from api.routers import alarmas, etl, metricas, tags
 from api.security import verificar_api_key
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(name)s %(message)s")
@@ -43,6 +43,7 @@ api_v1 = APIRouter(prefix="/api/v1", dependencies=[Depends(verificar_api_key)])
 api_v1.include_router(alarmas.router)
 api_v1.include_router(metricas.router)
 api_v1.include_router(tags.router)
+api_v1.include_router(etl.router)
 app.include_router(api_v1)
 
 

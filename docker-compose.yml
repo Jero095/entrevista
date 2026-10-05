@@ -55,5 +55,19 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # Frontend de demostración: nginx sirve la app de React y reenvía /api a la API,
+  # así el navegador usa un solo origen (http://localhost:3000) y no hace falta CORS.
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_KEY: ${API_KEY:-}
+    ports:
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   mssql-data:

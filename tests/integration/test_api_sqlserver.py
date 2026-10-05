@@ -201,11 +201,40 @@ def test_catalogo_coincide_con_la_bd():
 
 
 # --------------------------------------------------------------------------- #
+# Calidad de datos (ETL)
+# --------------------------------------------------------------------------- #
+
+
+def test_lotes_coinciden_con_la_bd():
+    esperado = sql("SELECT TOP 5 id, filas_leidas, filas_cargadas, filas_rechazadas FROM lote_carga ORDER BY id DESC")
+    status, body = get("/api/v1/etl/lotes", {"limit": 5})
+    assert status == 200
+    assert [[str(lote["id"]), str(lote["filas_leidas"]), str(lote["filas_cargadas"]), str(lote["filas_rechazadas"])]
+            for lote in body] == esperado
+
+
+def test_rechazados_coinciden_con_la_bd():
+    lote_id = int(sql("SELECT MAX(id) FROM lote_carga WHERE estado = 'OK'")[0][0])
+    total = int(sql(f"SELECT COUNT(*) FROM evento_rechazado WHERE lote_id = {lote_id}")[0][0])
+    status, body = get("/api/v1/etl/rechazados", {"limit": 5})
+    assert status == 200
+    assert body["lote_id"] == lote_id
+    assert body["total"] == total == sum(m["total"] for m in body["motivos"])
+    assert len(body["items"]) == 5 and isinstance(body["items"][0]["fila_original"], dict)
+
+
+def test_rechazados_de_lote_inexistente_es_404():
+    assert get("/api/v1/etl/rechazados", {"lote_id": 999999})[0] == 404
+
+
+# --------------------------------------------------------------------------- #
 # Seguridad: el usuario de la API es de solo lectura
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("sentencia", ["SELECT TOP 1 * FROM dbo.evento_alarma", "DELETE FROM dbo.evento_alarma"])
+@pytest.mark.parametrize("sentencia", [
+    "SELECT TOP 1 * FROM dbo.evento_alarma", "SELECT TOP 1 * FROM dbo.lote_carga", "DELETE FROM dbo.evento_alarma",
+])
 def test_usuario_de_la_api_no_puede_leer_tablas_ni_borrar(sentencia):
     usuario = os.environ.get("DB_API_USER", "api_lectura")
     resultado = subprocess.run(

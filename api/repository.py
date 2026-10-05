@@ -1,13 +1,16 @@
 """
 Acceso a datos. Es el ÚNICO módulo de la API que contiene SQL.
 
-La API lee a través de dos vistas (v_evento_alarma y v_catalogo), no de las
-tablas: el usuario de BD de la API solo tiene permiso SELECT sobre ellas, y el
-modelo físico puede cambiar sin tocar este código mientras las vistas se mantengan.
+La API lee a través de vistas (v_evento_alarma, v_catalogo, v_lote_carga y
+v_evento_rechazado), no de las tablas: el usuario de BD de la API solo tiene
+permiso SELECT sobre ellas, y el modelo físico puede cambiar sin tocar este
+código mientras las vistas se mantengan.
 """
 
 from __future__ import annotations
 
+import contextlib
+import json
 from datetime import UTC, datetime
 
 import pyodbc
@@ -148,6 +151,41 @@ class AlarmaRepository:
                 "vigente_desde": fila["vigente_desde"].replace(tzinfo=UTC),
             })
         return list(por_tag.values())
+
+    def lotes(self, limit: int) -> list[dict]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT TOP (?) * FROM dbo.v_lote_carga ORDER BY id DESC", limit)
+        return _filas(cursor)
+
+    def ultimo_lote_ok(self) -> int | None:
+        cursor = self.conn.cursor()
+        return cursor.execute("SELECT MAX(id) FROM dbo.v_lote_carga WHERE estado = 'OK'").fetchval()
+
+    def rechazos(self, lote_id: int, limit: int) -> dict | None:
+        """Motivos de rechazo agrupados y una muestra de filas rechazadas de un lote."""
+        cursor = self.conn.cursor()
+        if cursor.execute("SELECT 1 FROM dbo.v_lote_carga WHERE id = ?", lote_id).fetchone() is None:
+            return None
+        # El motivo trae el valor concreto ("...: 'N/A'"); para agrupar se usa la parte anterior a ':'.
+        cursor.execute(
+            """SELECT LEFT(motivo, CHARINDEX(':', motivo + ':') - 1) AS motivo, COUNT(*) AS total
+               FROM dbo.v_evento_rechazado WHERE lote_id = ?
+               GROUP BY LEFT(motivo, CHARINDEX(':', motivo + ':') - 1)
+               ORDER BY total DESC""",
+            lote_id,
+        )
+        motivos = _filas(cursor)
+        cursor.execute(
+            "SELECT TOP (?) id, motivo, fila_original FROM dbo.v_evento_rechazado WHERE lote_id = ? ORDER BY id",
+            limit, lote_id,
+        )
+        items = []
+        for fila in _filas(cursor):
+            # Si no es JSON válido se devuelve como texto.
+            with contextlib.suppress(ValueError):
+                fila["fila_original"] = json.loads(fila["fila_original"])
+            items.append(fila)
+        return {"lote_id": lote_id, "total": sum(m["total"] for m in motivos), "motivos": motivos, "items": items}
 
     def ping(self) -> None:
         self.conn.cursor().execute("SELECT 1").fetchval()

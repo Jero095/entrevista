@@ -49,8 +49,51 @@ class FakeRepository:
     def tags(self):
         return []
 
+    def lotes(self, limit):
+        return [LOTE][:limit]
+
+    def ultimo_lote_ok(self):
+        return LOTE["id"]
+
+    def rechazos(self, lote_id, limit):
+        if lote_id != LOTE["id"]:
+            return None
+        return {"lote_id": lote_id, "total": 1, "motivos": [{"motivo": "timestamp vacío", "total": 1}],
+                "items": [{"id": 1, "motivo": "timestamp vacío", "fila_original": {"timestamp": "", "tag": "PT-101"}}]}
+
     def ping(self):
         pass
+
+
+LOTE = {
+    "id": 7, "archivo": "alarms.csv", "inicio": datetime(2026, 10, 5, 12, 0), "fin": datetime(2026, 10, 5, 12, 1),
+    "estado": "OK", "mensaje_error": None, "filas_leidas": 22421, "filas_duplicadas": 415,
+    "filas_ya_cargadas": 0, "filas_cargadas": 21443, "filas_rechazadas": 563,
+}
+
+
+def test_lotes_del_etl(client):
+    response = client.get("/api/v1/etl/lotes")
+    assert response.status_code == 200
+    lote = response.json()[0]
+    assert lote["filas_cargadas"] == 21443 and lote["inicio"] == "2026-10-05T12:00:00Z"
+
+
+def test_rechazados_usa_el_ultimo_lote_por_defecto(client):
+    body = client.get("/api/v1/etl/rechazados").json()
+    assert body["lote_id"] == 7
+    assert body["items"][0]["fila_original"]["tag"] == "PT-101"
+
+
+def test_rechazados_de_lote_inexistente_es_404(client):
+    response = client.get("/api/v1/etl/rechazados", params={"lote_id": 999})
+    assert response.status_code == 404
+    assert _error(response)["codigo"] == "NO_ENCONTRADO"
+
+
+@pytest.mark.parametrize("params", [{"limit": 0}, {"limit": 101}, {"lote_id": 0}])
+def test_rechazados_parametros_invalidos(client, params):
+    assert client.get("/api/v1/etl/rechazados", params=params).status_code == 422
 
 
 @pytest.fixture

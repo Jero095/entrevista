@@ -62,7 +62,7 @@ def run_sql_script(conn: pyodbc.Connection, path: Path) -> None:
 
 
 # Usuario de solo lectura para la API (principio de mínimo privilegio): solo puede
-# hacer SELECT sobre las dos vistas que expone la API, nunca escribir ni leer tablas.
+# hacer SELECT sobre las vistas que expone la API, nunca escribir ni leer tablas.
 # CREATE LOGIN no acepta parámetros, así que el SQL dinámico se arma en el servidor
 # con QUOTENAME a partir de parámetros: ni el nombre ni la contraseña se concatenan
 # en Python, lo que evita inyección SQL aunque vengan de variables de entorno.
@@ -83,7 +83,9 @@ BEGIN
 END
 
 SET @sql = N'GRANT SELECT ON dbo.v_evento_alarma TO ' + QUOTENAME(@usuario)
-         + N'; GRANT SELECT ON dbo.v_catalogo TO ' + QUOTENAME(@usuario);
+         + N'; GRANT SELECT ON dbo.v_catalogo TO ' + QUOTENAME(@usuario)
+         + N'; GRANT SELECT ON dbo.v_lote_carga TO ' + QUOTENAME(@usuario)
+         + N'; GRANT SELECT ON dbo.v_evento_rechazado TO ' + QUOTENAME(@usuario);
 EXEC (@sql);
 """
 

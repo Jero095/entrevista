@@ -230,3 +230,16 @@ JOIN dbo.alarma a         ON a.tag_id = t.id
 JOIN dbo.alarma_config ac ON ac.alarma_id = a.id AND ac.vigente_hasta IS NULL
 JOIN dbo.criticidad c     ON c.id = ac.criticidad_id;
 GO
+
+/* Trazabilidad del ETL expuesta a la API (solo lectura): resumen de cada carga
+   y una muestra de las filas rechazadas con su motivo. */
+CREATE OR ALTER VIEW dbo.v_lote_carga AS
+SELECT id, archivo, inicio, fin, estado, mensaje_error, filas_leidas, filas_duplicadas,
+       filas_ya_cargadas, filas_cargadas, filas_rechazadas
+FROM dbo.lote_carga;
+GO
+
+CREATE OR ALTER VIEW dbo.v_evento_rechazado AS
+SELECT id, lote_id, fila_original, motivo
+FROM dbo.evento_rechazado;
+GO

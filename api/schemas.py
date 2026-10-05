@@ -197,6 +197,40 @@ class TagCatalogo(BaseModel):
     alarmas: list[AlarmaConfigurada]
 
 
+class LoteCarga(BaseModel):
+    id: int
+    archivo: str
+    inicio: datetime
+    fin: datetime | None
+    estado: Literal["EN_CURSO", "OK", "ERROR"]
+    mensaje_error: str | None
+    filas_leidas: int | None
+    filas_duplicadas: int | None
+    filas_ya_cargadas: int | None
+    filas_cargadas: int | None
+    filas_rechazadas: int | None
+
+    _utc = field_validator("inicio", "fin")(_a_utc)
+
+
+class MotivoRechazo(BaseModel):
+    motivo: str
+    total: int
+
+
+class EventoRechazado(BaseModel):
+    id: int
+    motivo: str
+    fila_original: dict[str, str] | str = Field(description="La fila tal como venía en el CSV")
+
+
+class RechazosLote(BaseModel):
+    lote_id: int
+    total: int
+    motivos: list[MotivoRechazo]
+    items: list[EventoRechazado] = Field(description="Muestra de filas rechazadas")
+
+
 class ErrorCampo(BaseModel):
     campo: str
     mensaje: str
