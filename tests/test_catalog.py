@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -25,13 +25,13 @@ def _version(limite, desde):
 
 
 def test_version_vigente_segun_la_fecha_del_evento():
-    enero = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    julio = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    enero = datetime(2026, 1, 1, tzinfo=UTC)
+    julio = datetime(2026, 7, 1, tzinfo=UTC)
     catalog = Catalog([_version("220", julio), _version("210", enero)])
 
-    assert catalog.version_at("TT-301", "HI", datetime(2026, 3, 15, tzinfo=timezone.utc)).limite == 210
-    assert catalog.version_at("TT-301", "HI", datetime(2026, 8, 10, tzinfo=timezone.utc)).limite == 220
-    assert catalog.version_at("TT-301", "HI", datetime(2025, 12, 31, tzinfo=timezone.utc)) is None
+    assert catalog.version_at("TT-301", "HI", datetime(2026, 3, 15, tzinfo=UTC)).limite == 210
+    assert catalog.version_at("TT-301", "HI", datetime(2026, 8, 10, tzinfo=UTC)).limite == 220
+    assert catalog.version_at("TT-301", "HI", datetime(2025, 12, 31, tzinfo=UTC)) is None
 
     # La vigencia de cada versión termina cuando empieza la siguiente
     assert [(v.limite, hasta) for v, hasta in catalog.versions()] == [(210, julio), (220, None)]

@@ -8,8 +8,8 @@ responde 422 antes de que se ejecute el endpoint o se toque la base de datos.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
-from enum import Enum
+from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from etl.normalizers import normalize_tag
 
 
-class Criticidad(str, Enum):
+class Criticidad(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -30,7 +30,7 @@ NIVEL: dict[Criticidad, int] = {
 }
 
 
-class Estado(str, Enum):
+class Estado(StrEnum):
     ACTIVE = "ACTIVE"
     ACK = "ACK"
     RTN = "RTN"
@@ -41,8 +41,8 @@ def _a_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 # --------------------------------------------------------------------------- #

@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import UTC, datetime, timedelta, timezone
+from enum import StrEnum
 
-UTC = timezone.utc
+UTC = UTC
 # Hora local de la planta (supuesto documentado en docs/dataset.md).
 PLANT_TZ = timezone(timedelta(hours=-5))
 
@@ -34,7 +34,7 @@ class InvalidValueError(ValueError):
     """El valor de una celda no se puede normalizar; el mensaje es el motivo de rechazo."""
 
 
-class Calidad(str, Enum):
+class Calidad(StrEnum):
     GOOD = "GOOD"
     BAD = "BAD"
 

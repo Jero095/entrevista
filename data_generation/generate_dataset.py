@@ -6,7 +6,7 @@ EVENTO del ciclo de vida de una alarma (ACTIVE -> ACK -> RTN), siguiendo las
 convenciones de ISA-18.2 / IEC 62682.
 
 Inyecta intencionalmente problemas de calidad de datos típicos de entornos
-industriales (ver INJECTED_ISSUES y docs/dataset.md) para que el proceso de
+industriales (ver DEFECT_RATE y docs/dataset.md) para que el proceso de
 ingesta tenga que resolverlos.
 
 Uso:
@@ -20,7 +20,7 @@ import csv
 import random
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 CSV_COLUMNS = [
@@ -71,6 +71,7 @@ UNPARSEABLE_TIMESTAMPS = ["N/A", "0000-00-00 00:00:00", "31/02/2026 10:00:00", "
 BAD_QUALITY_VALUES = ["Bad Quality", "#####", "NaN", "COMM FAIL", "---"]
 
 
+# Clase instrumento
 @dataclass(frozen=True)
 class TagSpec:
     tag: str
@@ -105,6 +106,7 @@ TAGS: list[TagSpec] = [
 ]
 
 
+# Aca aclaro las condiciones para el valor de la alarma
 def alarm_value(spec: TagSpec, rng: random.Random) -> float:
     """Valor del proceso en el instante en que se activa la alarma (cruza el límite)."""
     overshoot = abs(spec.limit - spec.normal) * rng.uniform(0.01, 0.15)
@@ -119,6 +121,7 @@ def alarm_value(spec: TagSpec, rng: random.Random) -> float:
     return 0.0  # DISC: el estado discreto cae a 0
 
 
+# Valor para RTN
 def return_value(spec: TagSpec, rng: random.Random) -> float:
     """Valor del proceso cuando la condición vuelve a normal."""
     if spec.alarm_type == "DISC":
@@ -126,6 +129,7 @@ def return_value(spec: TagSpec, rng: random.Random) -> float:
     return spec.normal + rng.gauss(0, abs(spec.limit - spec.normal) * 0.1)
 
 
+# Hace los eventos y simula el ciclo de vida
 def build_clean_events(n_alarms: int, start: datetime, end: datetime, rng: random.Random) -> list[dict]:
     """Genera eventos limpios (en UTC) siguiendo el ciclo de vida ACTIVE -> ACK -> RTN."""
     events: list[dict] = []
@@ -267,7 +271,7 @@ def apply_defects(event: dict, event_id: int, rng: random.Random, issues: Counte
 
 def generate(n_alarms: int, days: int, seed: int) -> tuple[list[dict], Counter]:
     rng = random.Random(seed)
-    end = datetime(2026, 9, 30, tzinfo=timezone.utc)
+    end = datetime(2026, 9, 30, tzinfo=UTC)
     start = end - timedelta(days=days)
 
     clean_events = build_clean_events(n_alarms, start, end, rng)

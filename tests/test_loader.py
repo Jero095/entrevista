@@ -1,6 +1,6 @@
 """Conversión de los eventos limpios a parámetros del driver (sin base de datos)."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 
@@ -11,10 +11,10 @@ from etl.pipeline import CLEAN_COLUMNS
 def test_nulos_de_pandas_se_envian_como_none_y_fechas_sin_zona():
     valid = pd.DataFrame([
         {"id_evento_origen": 1, "tag": "PT-101", "tipo_alarma": "HI",
-         "timestamp_utc": datetime(2026, 7, 2, 0, 11, 4, 278_000, tzinfo=timezone.utc),
+         "timestamp_utc": datetime(2026, 7, 2, 0, 11, 4, 278_000, tzinfo=UTC),
          "estado": "ACTIVE", "criticidad": "HIGH", "valor": 8.8, "calidad_valor": "GOOD"},
         {"id_evento_origen": 2, "tag": "PT-101", "tipo_alarma": "HI",
-         "timestamp_utc": datetime(2026, 7, 2, 0, 12, tzinfo=timezone.utc),
+         "timestamp_utc": datetime(2026, 7, 2, 0, 12, tzinfo=UTC),
          "estado": "ACK", "criticidad": "HIGH", "valor": None, "calidad_valor": None},
     ], columns=CLEAN_COLUMNS)
 

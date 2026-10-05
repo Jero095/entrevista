@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -70,7 +70,7 @@ class Catalog:
         result = []
         for versiones in self._versions.values():
             hasta = [v.vigente_desde for v in versiones[1:]] + [None]
-            result.extend(zip(versiones, hasta))
+            result.extend(zip(versiones, hasta, strict=True))
         return result
 
 
@@ -89,7 +89,7 @@ def load_catalog(path: Path) -> Catalog:
                     limite=Decimal(row["limite"]),
                     criticidad=row["criticidad"].strip().upper(),
                     # Las fechas del catálogo se expresan en UTC.
-                    vigente_desde=datetime.fromisoformat(row["vigente_desde"]).replace(tzinfo=timezone.utc),
+                    vigente_desde=datetime.fromisoformat(row["vigente_desde"]).replace(tzinfo=UTC),
                 )
             except (KeyError, ValueError, ArithmeticError) as exc:
                 raise ValueError(f"{path}:{line_no}: fila de catálogo inválida: {exc}") from exc

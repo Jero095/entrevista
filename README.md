@@ -42,7 +42,7 @@ flowchart LR
 | Modelo relacional (SQL Server) | [`sql/01_schema.sql`](sql/01_schema.sql) |
 | API en Python (FastAPI) | [`api/`](api/) |
 | Colección de Postman | [`postman/alarmas.postman_collection.json`](postman/alarmas.postman_collection.json) |
-| Pruebas (150 unitarias) | [`tests/`](tests/) |
+| Pruebas (150 unitarias + 31 de integración contra SQL Server) | [`tests/`](tests/) |
 | Entorno reproducible | [`docker-compose.yml`](docker-compose.yml), [`Dockerfile`](Dockerfile) |
 
 ```
@@ -63,9 +63,18 @@ flowchart LR
 
 ### Opción A: Docker (recomendada)
 
-Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abierto y en ejecución.
+Requisitos: [Git](https://git-scm.com/) y [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+abierto y en ejecución. Los puertos 1433 y 8000 deben estar libres. No hace falta instalar Python
+ni SQL Server: todo corre dentro de los contenedores, y el dataset ya viene incluido en el repositorio.
 
-1. Crear el archivo de configuración a partir del ejemplo:
+1. Clonar el repositorio:
+
+   ```bash
+   git clone https://github.com/Jero095/entrevista.git
+   cd entrevista
+   ```
+
+2. Crear el archivo de configuración a partir del ejemplo:
 
    ```bash
    cp .env.example .env
@@ -73,7 +82,7 @@ Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abi
 
    (En PowerShell: `Copy-Item .env.example .env`)
 
-2. Levantar todo:
+3. Levantar todo:
 
    ```bash
    docker compose up -d --build
@@ -89,13 +98,13 @@ Requisito: [Docker Desktop](https://www.docker.com/products/docker-desktop/) abi
 
    La primera vez descarga la imagen de SQL Server (~1,5 GB) y tarda unos minutos.
 
-3. Comprobar que todo está listo (`api` debe aparecer como `healthy`):
+4. Comprobar que todo está listo (`api` debe aparecer como `healthy`):
 
    ```bash
    docker compose ps
    ```
 
-4. Ver el resultado de la carga:
+5. Ver el resultado de la carga:
 
    ```bash
    docker compose logs etl
@@ -135,7 +144,17 @@ uvicorn api.main:app --reload     # API en http://localhost:8000
 |---|---|
 | `python -m etl validate --rejected-output data/rejected/rejected.csv` | Limpiar el CSV y ver el reporte de calidad **sin base de datos** |
 | `python data_generation/generate_dataset.py --alarms 8000 --seed 42` | Regenerar el dataset (misma semilla = mismo archivo) |
-| `python -m pytest` | Ejecutar las pruebas (no necesitan base de datos) |
+| `python -m pytest` | Ejecutar las pruebas (las de integración se omiten si la API no está levantada) |
+| `python -m ruff check .` | Revisar calidad y estilo del código (configurado en `pyproject.toml`) |
+
+### Solución de problemas
+
+| Síntoma | Causa y solución |
+|---|---|
+| `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop no está abierto. Abrirlo y esperar a que indique *Engine running* |
+| `Bind for 0.0.0.0:1433 failed` o `...:8000 failed: port is already allocated` | Otro programa usa ese puerto (por ejemplo otro SQL Server u otra API). Cerrarlo o cambiar el puerto publicado en `docker-compose.yml` (`"8001:8000"`) |
+| La API responde algo inesperado en `localhost:8000` (por ejemplo `"Not signed in"`) | Otro programa local escucha en `127.0.0.1:8000`. Comprobar con `curl http://localhost:8000/health`: esta API responde `{"estado": "ok", ...}` |
+| `etl` termina con `exited (1)` | Ver el motivo con `docker compose logs etl`. Si la contraseña de `.env` no cumple la política de SQL Server, la base no arranca |
 
 ---
 
@@ -528,7 +547,9 @@ Siguientes pasos para volúmenes de planta (millones de eventos por año):
 python -m pytest
 ```
 
-**150 pruebas** que no necesitan base de datos:
+**181 pruebas** en dos niveles.
+
+**Unitarias (150)**, no necesitan base de datos:
 
 | Archivo | Qué prueba |
 |---|---|
@@ -538,9 +559,30 @@ python -m pytest
 | [`test_loader.py`](tests/test_loader.py) | Conversión de nulos de pandas y fechas para el driver |
 | [`tests/api/`](tests/api/test_api.py) | API con repositorio falso: cada regla de validación (422), 404, 401, 405, 503 con la BD caída, 500 sin filtrar detalles internos, normalización de filtros y formato de respuesta |
 
-Además, la solución se verificó contra SQL Server en Docker: los totales y rankings de la
-API coinciden con consultas directas a la base, el usuario `api_lectura` no puede leer
-tablas ni borrar datos, y las 22 peticiones de la colección de Postman devuelven el código esperado.
+**De integración (31)**, en [`tests/integration/`](tests/integration/test_api_sqlserver.py):
+llaman a la API real levantada con Docker y comparan cada resultado con una consulta directa
+a SQL Server, verificando toda la cadena CSV → ETL → base de datos → API.
+
+| Qué verifican |
+|---|
+| El total de cada filtro (tiempo, hora local con offset, criticidad, varias criticidades, tag y su variante sucia, estado, todos combinados) es igual al `COUNT(*)` de la base |
+| Paginación sin repetidos, orden descendente y fechas en UTC |
+| Rankings de top tags (por alarmas, por eventos, CRITICAL en un rango) y conteo por criticidad idénticos a SQL |
+| El catálogo de la API coincide con la base |
+| Errores 422, 404 y 401 en la API real |
+| El usuario `api_lectura` **no** puede leer tablas ni borrar datos (SQL Server lo deniega) |
+
+```bash
+docker compose up -d --build
+python -m pytest tests/integration -v
+```
+
+Si la API no responde, estas pruebas se **omiten** en lugar de fallar, así la suite completa
+también se puede ejecutar sin Docker. Para decidirlo no basta con que algo responda en el
+puerto 8000: comprueban que `/health` devuelva la respuesta de esta API.
+
+El código pasa el linter `ruff` sin observaciones (reglas de estilo PEP 8, errores, bugs
+probables, sintaxis moderna y orden de imports).
 
 ---
 
@@ -555,6 +597,6 @@ tablas ni borrar datos, y las 22 peticiones de la colección de Postman devuelve
   DataFrame de texto a `pipeline.transform`.
 - **Autenticación**: la API key es adecuada para integración entre sistemas; para usuarios
   finales correspondería OAuth2/OIDC con el proveedor de identidad de la planta.
-- **Pruebas de integración automatizadas** contra SQL Server (por ejemplo con Testcontainers) en CI.
+- **Integración continua (CI)**: ejecutar linter, pruebas unitarias y de integración en cada push (por ejemplo GitHub Actions levantando el `docker compose`).
 - **Supuestos a validar con el cliente**: zona horaria de cada fuente, convención día/mes,
   y el catálogo real de instrumentos y límites.

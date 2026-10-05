@@ -1,6 +1,6 @@
 """Casos borde de cada defecto documentado en docs/dataset.md."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,9 +16,9 @@ from etl.normalizers import (
     normalize_valor,
 )
 
-NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 1, tzinfo=UTC)
 # El mismo instante (2026-07-02 00:11:04 UTC) en todos los formatos de la fuente.
-EXPECTED = datetime(2026, 7, 2, 0, 11, 4, tzinfo=timezone.utc)
+EXPECTED = datetime(2026, 7, 2, 0, 11, 4, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("raw", [
@@ -42,7 +42,7 @@ def test_timestamp_con_milisegundos():
 
 
 def test_timestamp_devuelve_utc_con_zona():
-    assert normalize_timestamp("01/07/2026 19:11:04", now=NOW).tzinfo == timezone.utc
+    assert normalize_timestamp("01/07/2026 19:11:04", now=NOW).tzinfo == UTC
 
 
 @pytest.mark.parametrize("raw", [

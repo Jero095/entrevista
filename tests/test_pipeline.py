@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pandas as pd
@@ -7,8 +7,8 @@ import pytest
 from etl.catalog import AlarmaCatalogo, Catalog
 from etl.pipeline import transform
 
-NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
-DESDE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 10, 1, tzinfo=UTC)
+DESDE = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _alarma(tag, tipo, limite, criticidad, unidad="bar", desde=DESDE):
@@ -45,7 +45,7 @@ def test_fila_limpia_se_carga(catalog):
     assert result.stats.validas == 1
     event = result.valid.iloc[0]
     assert event.tag == "FT-201"
-    assert event.timestamp_utc == datetime(2026, 7, 2, tzinfo=timezone.utc)
+    assert event.timestamp_utc == datetime(2026, 7, 2, tzinfo=UTC)
     assert event.calidad_valor == "GOOD"
 
 
@@ -60,7 +60,7 @@ def test_fila_sucia_pero_recuperable_se_normaliza(catalog):
                                 timestamp="01/07/2026 19:00:00"))
     event = result.valid.iloc[0]
     assert (event.tag, event.criticidad, event.estado, event.valor) == ("FT-201", "MEDIUM", "ACTIVE", 79.5)
-    assert event.timestamp_utc == datetime(2026, 7, 2, tzinfo=timezone.utc)
+    assert event.timestamp_utc == datetime(2026, 7, 2, tzinfo=UTC)
 
 
 def test_criticidad_vacia_se_toma_del_catalogo(catalog):

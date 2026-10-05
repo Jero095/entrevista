@@ -3,7 +3,13 @@ from typing import Annotated
 from fastapi import APIRouter, Query
 
 from api.db import Repo
-from api.schemas import ErrorRespuesta, FiltroResumen, FiltroTopTags, ResumenCriticidad, TopTagsRespuesta
+from api.schemas import (
+    ErrorRespuesta,
+    FiltroResumen,
+    FiltroTopTags,
+    ResumenCriticidad,
+    TopTagsRespuesta,
+)
 
 router = APIRouter(prefix="/metricas", tags=["Métricas"], responses={422: {"model": ErrorRespuesta}})
 

@@ -8,11 +8,18 @@ modelo físico puede cambiar sin tocar este código mientras las vistas se mante
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pyodbc
 
-from api.schemas import NIVEL, Criticidad, FiltroAlarmas, FiltroResumen, FiltroTiempo, FiltroTopTags
+from api.schemas import (
+    NIVEL,
+    Criticidad,
+    FiltroAlarmas,
+    FiltroResumen,
+    FiltroTiempo,
+    FiltroTopTags,
+)
 
 _COLUMNAS_EVENTO = (
     "id, id_evento_origen, timestamp_utc, tag, descripcion, area, tipo_alarma, criticidad, "
@@ -22,12 +29,12 @@ _COLUMNAS_EVENTO = (
 
 def _naive_utc(value: datetime) -> datetime:
     """La BD guarda DATETIME2 en UTC sin zona horaria."""
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _filas(cursor: pyodbc.Cursor) -> list[dict]:
     columnas = [c[0] for c in cursor.description]
-    return [dict(zip(columnas, fila)) for fila in cursor.fetchall()]
+    return [dict(zip(columnas, fila, strict=True)) for fila in cursor.fetchall()]
 
 
 def _where(f: FiltroTiempo, solo_alarmas: bool = False) -> tuple[str, list]:
@@ -138,7 +145,7 @@ class AlarmaRepository:
             tag["alarmas"].append({
                 "tipo_alarma": fila["tipo_alarma"], "limite": fila["limite"],
                 "criticidad": fila["criticidad"],
-                "vigente_desde": fila["vigente_desde"].replace(tzinfo=timezone.utc),
+                "vigente_desde": fila["vigente_desde"].replace(tzinfo=UTC),
             })
         return list(por_tag.values())
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -39,7 +39,7 @@ def _to_db_datetime(value: datetime | None) -> datetime | None:
         return None
     if isinstance(value, pd.Timestamp):
         value = value.to_pydatetime()
-    return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 def _none_if_na(value):

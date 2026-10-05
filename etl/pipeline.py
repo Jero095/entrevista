@@ -22,8 +22,8 @@ from etl.normalizers import (
     normalize_estado,
     normalize_id_evento,
     normalize_tag,
-    normalize_tipo_alarma,
     normalize_timestamp,
+    normalize_tipo_alarma,
     normalize_valor,
 )
 
@@ -116,7 +116,9 @@ def _transform_row(row: dict, catalog: Catalog, now: datetime, stats: TransformS
             elif timestamp is not None:
                 version = catalog.version_at(tag, tipo_alarma, timestamp)
                 if version is None:
-                    errors.append(f"la alarma {tag} {tipo_alarma} no tenía configuración vigente en {timestamp:%Y-%m-%d}")
+                    errors.append(
+                        f"la alarma {tag} {tipo_alarma} no tenía configuración vigente en {timestamp:%Y-%m-%d}"
+                    )
 
     if errors:
         return None, errors
