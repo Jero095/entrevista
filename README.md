@@ -64,83 +64,129 @@ flowchart LR
 
 ## Ejecución
 
-### Opción A: Docker (recomendada)
+El sistema tiene cuatro piezas, y cada una corre en su propio contenedor de Docker:
 
-Requisitos: [Git](https://git-scm.com/) y [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-abierto y en ejecución. Los puertos 1433 y 8000 deben estar libres. No hace falta instalar Python
-ni SQL Server: todo corre dentro de los contenedores, y el dataset ya viene incluido en el repositorio.
+| Pieza | Servicio | Dirección | Qué es |
+|---|---|---|---|
+| Base de datos | `db` | `localhost:1433` | SQL Server 2022 (edición Developer) |
+| Carga de datos | `etl` | — | Crea la base y el esquema, limpia el CSV, lo carga y **termina** |
+| Backend | `api` | http://localhost:8000 (Swagger en `/docs`) | API REST en FastAPI |
+| Frontend | `frontend` | **http://localhost:3000** | Interfaz web (React) que consume la API |
 
-1. Clonar el repositorio:
+### Requisitos
 
-   ```bash
-   git clone https://github.com/Jero095/entrevista.git
-   cd entrevista
-   ```
+- [Git](https://git-scm.com/) y [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+  **abierto y en ejecución** (debe indicar *Engine running*).
+- Puertos libres: **1433**, **8000** y **3000**.
+- No hace falta instalar Python, Node ni SQL Server: todo corre en contenedores, y el
+  dataset ya viene incluido en el repositorio.
 
-2. Crear el archivo de configuración a partir del ejemplo:
+Primero, una sola vez, clonar el repositorio y crear el archivo de configuración:
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+git clone https://github.com/Jero095/entrevista.git
+cd entrevista
+cp .env.example .env
+```
 
-   (En PowerShell: `Copy-Item .env.example .env`)
+(En PowerShell: `Copy-Item .env.example .env`.) El frontend está en la rama `front`; si
+el repositorio se clonó en otra rama: `git checkout front`.
 
-3. Levantar todo:
+### Opción A: todo con un comando (recomendada)
 
-   ```bash
-   docker compose up -d --build
-   ```
+```bash
+docker compose up -d --build
+```
 
-   Esto levanta cuatro servicios en orden:
+Levanta las cuatro piezas en orden: la base de datos, luego el ETL (espera a que la base
+esté lista), luego la API (espera a que el ETL termine bien) y por último el frontend
+(espera a que la API responda). La primera vez descarga la imagen de SQL Server (~1,5 GB)
+y tarda unos minutos.
 
-   | Servicio | Qué hace |
-   |---|---|
-   | `db` | SQL Server 2022 (edición Developer) |
-   | `etl` | Crea la base, el esquema y el usuario de solo lectura; limpia y carga el CSV; termina |
-   | `api` | Arranca cuando el ETL terminó bien, en http://localhost:8000 |
-   | `frontend` | Interfaz web en **http://localhost:3000** (nginx sirve la app y reenvía `/api` a la API) |
+Comprobar que todo está listo (`db` y `api` como `healthy`, `etl` como `exited (0)`,
+`frontend` como `running`):
 
-   La primera vez descarga la imagen de SQL Server (~1,5 GB) y tarda unos minutos.
+```bash
+docker compose ps -a
+```
 
-4. Comprobar que todo está listo (`api` debe aparecer como `healthy`):
+Abrir **http://localhost:3000**. Que el ETL aparezca terminado es lo esperado: es un
+proceso por lotes que carga los datos y finaliza.
 
-   ```bash
-   docker compose ps
-   ```
+Ver el resultado de la carga:
 
-5. Ver el resultado de la carga:
+```bash
+docker compose logs etl
+```
 
-   ```bash
-   docker compose logs etl
-   ```
+```
+Filas leídas:        22421
+Duplicadas:          415
+Válidas:             21443
+Rechazadas:          563
+Lote 1: 21443 eventos cargados, 0 ya existían en la BD
+```
 
-   ```
-   Filas leídas:        22421
-   Duplicadas:          415
-   Válidas:             21443
-   Rechazadas:          563
-   Lote 1: 21443 eventos cargados, 0 ya existían en la BD
-   ```
+### Opción B: cada pieza por separado
 
-Para apagar: `docker compose down` (conserva los datos) o `docker compose down -v` (borra la base).
+Útil para entender el sistema paso a paso o para reiniciar solo una parte.
 
-> Levantar la solución acepta las licencias de Microsoft de SQL Server Developer y del
-> driver ODBC 18 (`ACCEPT_EULA=Y` en `docker-compose.yml` y `Dockerfile`).
+| Paso | Comando | Resultado |
+|---|---|---|
+| 1. Base de datos | `docker compose up -d db` | SQL Server en `localhost:1433`. Esperar a que `docker compose ps` la muestre `healthy` (~30 s) |
+| 2. Carga de datos | `docker compose up etl` | Crea la base, el esquema y el usuario de solo lectura; carga el CSV y muestra el resumen. Sin `-d`, para ver la salida |
+| 3. Backend | `docker compose up -d api` | API en http://localhost:8000 y Swagger en http://localhost:8000/docs |
+| 4. Frontend | `docker compose up -d frontend` | Interfaz en http://localhost:3000 |
 
-### Opción B: sin Docker
+Notas:
 
-Requisitos: Python 3.12+, un SQL Server accesible y el
+- Docker respeta las dependencias: si se levanta directamente la API, levanta antes la
+  base y el ETL. Volver a ejecutar el ETL es seguro, porque la carga es idempotente
+  ("0 eventos cargados, 21443 ya existían").
+- Reiniciar solo la API, sin volver a ejecutar el ETL:
+  `docker compose up -d --no-deps --force-recreate api`.
+- Ver los registros de una pieza: `docker compose logs api` (o `db`, `etl`, `frontend`).
+- Detener una pieza: `docker compose stop frontend`.
+
+### Opción C: desarrollo local, sin contenedores para el código
+
+Para modificar el código y ver los cambios al instante. La base de datos conviene
+seguir usándola desde Docker (`docker compose up -d db`).
+
+**Backend (ETL y API).** Requiere Python 3.12+ y el
 [Microsoft ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server).
+En `.env`, `DB_HOST=localhost` apunta a la base de Docker.
 
 ```bash
 python -m venv .venv
 .venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
 pip install -r requirements-dev.txt
-cp .env.example .env              # ajustar DB_HOST y contraseñas
 python -m etl init-db             # crea la BD, el esquema y el usuario de la API
 python -m etl load                # limpia y carga data/raw/alarms.csv
-uvicorn api.main:app --reload     # API en http://localhost:8000
+uvicorn api.main:app --reload     # API en http://localhost:8000, recarga al guardar
 ```
+
+**Frontend.** Requiere Node 20.19+ o 22.12+ (lo exige Vite). El servidor de desarrollo reenvía `/api` y `/health` a la
+API en `http://localhost:8000` (la de Docker o la local). Para apuntar a otra dirección,
+definir `API_TARGET` antes de arrancarlo (PowerShell: `$env:API_TARGET="http://localhost:8001"`).
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173, recarga al guardar
+npm run build      # verificación de tipos (TypeScript estricto) + compilación
+npm run lint       # oxlint
+```
+
+### Apagar
+
+```bash
+docker compose down        # detiene todo y conserva los datos
+docker compose down -v     # detiene todo y borra la base (la próxima vez se recarga desde el CSV)
+```
+
+> Levantar la solución acepta las licencias de Microsoft de SQL Server Developer y del
+> driver ODBC 18 (`ACCEPT_EULA=Y` en `docker-compose.yml` y `Dockerfile`).
 
 ### Otros comandos útiles
 
@@ -504,9 +550,15 @@ válido, la API responde antes de tocar la base de datos. Todos los errores tien
 
 ### 5. Frontend
 
-Interfaz web en [`frontend/`](frontend/) para recorrer todas las funcionalidades sin usar la
-terminal. Se levanta con el resto del sistema (`docker compose up -d --build`) en
-**http://localhost:3000**.
+Interfaz web en [`frontend/`](frontend/) para recorrer todas las funcionalidades del
+sistema con clics, sin usar la terminal ni Postman. Consume la misma API que usaría
+cualquier otro sistema de la planta.
+
+**Cómo abrirlo:** con el sistema levantado (ver [Ejecución](#ejecución)), entrar a
+**http://localhost:3000**. Si la cabecera indica *API y base de datos en línea*, todo
+está conectado.
+
+#### Qué tiene
 
 | Sección | Endpoint | Qué muestra |
 |---|---|---|
@@ -516,13 +568,29 @@ terminal. Se levanta con el resto del sistema (`docker compose up -d --build`) e
 | Detalle de evento | `GET /alarmas/{id}` | Todos los campos de un evento, con unidad y límite vigente |
 | Top tags | `GET /metricas/top-tags` | Ranking de *bad actors* en barras |
 | Por criticidad | `GET /metricas/por-criticidad` | Distribución de alarmas por nivel |
-| Catálogo | `GET /tags` | Configuración de la planta |
+| Catálogo | `GET /tags` | Configuración de la planta: instrumentos, unidades, límites y criticidades |
 | Calidad de datos | `GET /etl/lotes`, `GET /etl/rechazados` | Resultado de cada carga y filas rechazadas tal como venían en el CSV, con su motivo |
-| Pruebas de errores | varios | 11 casos fijos (422, 404, 401) con el código esperado y el obtenido |
+| Pruebas de errores | varios | 11 casos fijos (422, 404, 401) con el código esperado y el obtenido; "Ejecutar todos" los prueba de una vez |
 
-**Gráficas por instrumento.** Eje Y: valor registrado en el evento; eje X: fecha (UTC). El
-umbral se dibuja con el límite **vigente en cada evento**, así que si un límite se versionó
-aparece como un escalón. Cada tipo de alarma usa la gráfica que lo representa:
+En todas las pantallas:
+
+- **Datos de ejemplo**: llena una consulta fija y la ejecuta. Por ejemplo, en Alarmas:
+  `pt_101` (escrito "sucio" a propósito) con criticidad HIGH o superior en la primera
+  semana de julio, que devuelve 324 eventos.
+- **Ícono ⓘ** en cada campo, con su explicación (formato esperado, valores válidos y
+  qué error devuelve la API si no se cumple).
+- **La petición HTTP real**: método, URL, código de respuesta, tiempo y el JSON completo
+  (botón *Ver JSON*). Los errores se muestran con el formato uniforme de la API.
+- **API key editable** en la cabecera: si se borra, se ve el error 401.
+- **Indicador de estado** en la cabecera, que consulta `/health` cada 30 segundos.
+
+#### Gráficas por instrumento
+
+Eje Y: valor registrado en el evento; eje X: fecha (UTC). El umbral se dibuja con el
+límite **vigente en cada evento**, así que si un límite se versionó aparece como un
+escalón. Los puntos tienen el color de su estado (rojo ACTIVE, ámbar ACK, verde RTN) y
+al pasar el mouse muestran fecha, estado y valor. Cada tipo de alarma usa la gráfica
+que la representa:
 
 | Alarma | Gráfica | Por qué |
 |---|---|---|
@@ -531,32 +599,34 @@ aparece como un escalón. Cada tipo de alarma usa la gráfica que lo representa:
 | ROC | Barras verticales de la tasa de cambio | El límite es una tasa. Los RTN registran el caudal absoluto (otra magnitud) y no se mezclan en el mismo eje |
 | DISC | Escalones | Una señal 0/1 mantiene su estado hasta el siguiente cambio |
 
-En cada pantalla:
+La sección pide todas las páginas del rango (500 eventos por página) con un tope de
+10 000 eventos; si el rango tiene más, lo avisa y sugiere acotarlo.
 
-- **Datos de ejemplo** llena una consulta fija y la ejecuta (por ejemplo, `pt_101` con
-  criticidad HIGH o superior en la primera semana de julio: 324 eventos).
-- Cada campo tiene un ícono **ⓘ** con su explicación.
-- Se muestra la petición HTTP real: URL, código, tiempo y la respuesta JSON completa.
-- La API key se puede cambiar o borrar en la cabecera para ver el error 401.
+#### Cómo está construido
 
-**Decisiones:**
+```
+frontend/
+├── Dockerfile          compila con Node y sirve con nginx (imagen en dos etapas)
+├── nginx.conf          sirve la app y reenvía /api, /health y /docs a la API
+└── src/
+    ├── api/            cliente HTTP, tipos de las respuestas y contexto de la API key
+    ├── components/     componentes reutilizables (tarjetas, campos con ⓘ, panel de petición)
+    │   └── charts/     gráficas SVG hechas a mano y sus escalas
+    ├── sections/       una pantalla por sección del menú
+    ├── hooks/          estado de las consultas y acceso a la API
+    └── ejemplos.ts     datos de ejemplo fijos de cada pantalla
+```
 
 | Decisión | Por qué |
 |---|---|
 | React + Vite + Tailwind, con TypeScript estricto | Los tipos de las respuestas reflejan los modelos de la API; un error de tipos detiene la compilación |
-| Sin librerías de gráficos ni de componentes | Las barras son CSS; menos dependencias, menos puntos de falla |
+| Sin librerías de gráficos ni de componentes | Gráficas en SVG y barras en CSS: menos dependencias, menos puntos de falla y control total del dibujo |
 | nginx sirve la app y reenvía `/api` a la API | El navegador habla con un solo origen: no hace falta CORS ni conocer la dirección de la API |
 | Imagen en dos etapas (Node compila, nginx sirve) | La imagen final no incluye Node ni `node_modules` |
 
-Para desarrollar el frontend fuera de Docker (con la API levantada en el puerto 8000):
-
-```bash
-cd frontend
-npm install
-npm run dev        # http://localhost:5173, recarga al guardar
-npm run build      # verificación de tipos + compilación
-npm run lint
-```
+La API key de desarrollo se incluye en el código del navegador (variable `VITE_API_KEY`
+al compilar). Es aceptable para una demo local, no para producción: ver
+[Limitaciones](#limitaciones-y-trabajo-futuro).
 
 ---
 
